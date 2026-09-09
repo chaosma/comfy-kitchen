@@ -484,6 +484,75 @@ def _empty_cuda_tensor(device: torch.device, dtype: torch.dtype) -> torch.Tensor
     return empty
 
 
+# ---- StreamK override for very large-N INT8 GEMMs -------------------------------
+# cutlass_gemm_int8.cu's select_fused_int8_config() sends the large-M/large-mn
+# shapes to config 13 (128x256x64 + LeanStreamK). StreamK exists to fix POOR wave
+# quantisation: it splits K so the last partial wave does not idle most SMs. Past
+# roughly 140 full waves the tail is under 1% of the work, and StreamK's extra
+# reduction traffic becomes pure overhead -- it degrades superlinearly from there.
+#
+# Measured on an RTX 4090 (128 SMs), M=38819, K=5376, sweeping N:
+#     waves    26    50    76   100   126   150   200   228
+#   cfg0/13  1.447 1.349 1.357 1.309 1.061 0.989 0.825 0.698
+# so StreamK is right below ~126 waves and wrong above ~150.
+#
+# MiniMax H3's qkv_proj (M=38819, N=21504, K=5376) lands at 200 waves and pays
+# 1.25x for it: 50.7% of peak on config 13 against 63.4% on config 0. Its fc1
+# (266 waves) already takes the plain path, so the heuristic's boundary is simply
+# drawn in the wrong place for tall-and-wide shapes.
+#
+# Output is bit-identical between the two configs (verified, max abs diff 0.0),
+# so this is scheduling only.
+_STREAMK_WAVE_LIMIT = 140.0
+_sm_count_cache: dict[int, int] = {}
+
+
+def _sm_count(device_index: int) -> int:
+    n = _sm_count_cache.get(device_index)
+    if n is None:
+        n = torch.cuda.get_device_properties(device_index).multi_processor_count
+        _sm_count_cache[device_index] = n
+    return n
+
+
+def _heuristic_fused_int8_config(m: int, n: int, k: int) -> int:
+    """Mirror of select_fused_int8_config() in cutlass_gemm_int8.cu."""
+    if k % 16 != 0:
+        return 9
+    mn = m * n
+    if n <= 24832:
+        if mn <= 1477632:
+            if mn <= 259072:
+                return 6 if k <= 7296 else 12
+            return 2 if n * k <= 16252928 else 12
+        if mn <= 4193792:
+            return 1 if n * k <= 5275648 else 12
+        return 0 if m * k <= n * 5675 else 13
+    if n * k <= m * 11096:
+        return 0
+    return 0 if mn <= 108003328 else 13
+
+
+def _int8_config_override(m: int, n: int, k: int, device_index: int, has_bias: bool):
+    """Config index to force, or None to let the C++ heuristic decide.
+
+    Only fires where the heuristic would choose StreamK on a shape with far more
+    waves than StreamK can help. cutlass_int8_dequant_config() takes no bias, so
+    biased GEMMs are left alone (H3's DiT projections are all bias-free).
+    """
+    if has_bias or _STREAMK_INT8_OVERRIDE_OFF:
+        return None
+    if _heuristic_fused_int8_config(m, n, k) != 13:
+        return None
+    ctas = -(-m // 128) * (-(-n // 256))
+    if ctas / max(1, _sm_count(device_index)) < _STREAMK_WAVE_LIMIT:
+        return None
+    return 0
+
+
+_STREAMK_INT8_OVERRIDE_OFF = os.environ.get("COMFY_KITCHEN_DISABLE_STREAMK_OVERRIDE", "0") == "1"
+
+
 def _int8_weight_scale_arg(weight_scale: torch.Tensor, device: torch.device) -> torch.Tensor:
     if weight_scale.device == device and weight_scale.dtype == torch.float32 and weight_scale.is_contiguous():
         return weight_scale
@@ -956,16 +1025,29 @@ def _int4_linear_via_int8_values(
     ):
         ws_cutlass = weight_scale_arg if weight_scale_arg.numel() == n else weight_scale_arg.expand(n).contiguous()
         bias_f32 = bias_arg.to(torch.float32).contiguous() if bias is not None else bias_arg
-        used_cutlass = _C.cutlass_int8_dequant(
-            _wrap_for_dlpack(x_int8),
-            _wrap_for_dlpack(weight_int8),
-            _wrap_for_dlpack(x_scale_arg.reshape(m, 1)),
-            _wrap_for_dlpack(ws_cutlass),
-            _wrap_for_dlpack(bias_f32),
-            _wrap_for_dlpack(output),
-            DTYPE_TO_CODE[out_dtype],
-            torch.cuda.current_stream(x_int8.device).cuda_stream,
-        )
+        _cfg = _int8_config_override(m, n, k, x_int8.get_device(), bias is not None)
+        if _cfg is not None:
+            used_cutlass = _C.cutlass_int8_dequant_config(
+                _wrap_for_dlpack(x_int8),
+                _wrap_for_dlpack(weight_int8),
+                _wrap_for_dlpack(x_scale_arg.reshape(m, 1)),
+                _wrap_for_dlpack(ws_cutlass),
+                _wrap_for_dlpack(output),
+                DTYPE_TO_CODE[out_dtype],
+                _cfg,
+                torch.cuda.current_stream(x_int8.device).cuda_stream,
+            )
+        if not used_cutlass:
+            used_cutlass = _C.cutlass_int8_dequant(
+                _wrap_for_dlpack(x_int8),
+                _wrap_for_dlpack(weight_int8),
+                _wrap_for_dlpack(x_scale_arg.reshape(m, 1)),
+                _wrap_for_dlpack(ws_cutlass),
+                _wrap_for_dlpack(bias_f32),
+                _wrap_for_dlpack(output),
+                DTYPE_TO_CODE[out_dtype],
+                torch.cuda.current_stream(x_int8.device).cuda_stream,
+            )
     if used_cutlass:
         return output
 
@@ -2029,16 +2111,29 @@ def int8_linear(
     ):
         ws_cutlass = weight_scale if weight_scale.numel() == n else weight_scale.expand(n).contiguous()
         bias_f32 = bias_arg.to(torch.float32).contiguous() if bias is not None else bias_arg
-        used_cutlass = _C.cutlass_int8_dequant(
-            _wrap_for_dlpack(x_qdata),
-            _wrap_for_dlpack(weight),
-            _wrap_for_dlpack(x_scale),
-            _wrap_for_dlpack(ws_cutlass),
-            _wrap_for_dlpack(bias_f32),
-            _wrap_for_dlpack(out),
-            output_dtype_code,
-            stream_ptr,
-        )
+        _cfg = _int8_config_override(m, n, k, x_qdata.get_device(), bias is not None)
+        if _cfg is not None:
+            used_cutlass = _C.cutlass_int8_dequant_config(
+                _wrap_for_dlpack(x_qdata),
+                _wrap_for_dlpack(weight),
+                _wrap_for_dlpack(x_scale),
+                _wrap_for_dlpack(ws_cutlass),
+                _wrap_for_dlpack(out),
+                output_dtype_code,
+                _cfg,
+                stream_ptr,
+            )
+        if not used_cutlass:
+            used_cutlass = _C.cutlass_int8_dequant(
+                _wrap_for_dlpack(x_qdata),
+                _wrap_for_dlpack(weight),
+                _wrap_for_dlpack(x_scale),
+                _wrap_for_dlpack(ws_cutlass),
+                _wrap_for_dlpack(bias_f32),
+                _wrap_for_dlpack(out),
+                output_dtype_code,
+                stream_ptr,
+            )
     if not used_cutlass:
         # Fallback: cuBLAS int8 GEMM (int32) + separate dequant kernel.
         use_turing_padding = x_qdata.is_cuda and _cuda_device_is_turing(x_qdata.get_device())
