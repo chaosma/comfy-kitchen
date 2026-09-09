@@ -466,6 +466,18 @@ bool dispatch_fused(const int8_t* A, const int8_t* B, const float* xs, const flo
         &FusedInt8Gemm<OutT, 128, 256, 64, 64, 64, 64, 3,
                        cutlass::arch::Sm80, float, false, 16,
                        ThreadblockSwizzleLeanStreamK>::run,
+        &FusedInt8Gemm<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, float, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run,
+        &FusedInt8Gemm<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, float, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
+        &FusedInt8Gemm<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, float, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run,
+        &FusedInt8Gemm<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, float, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
     };
     return launch_fused_int8_heuristic(M, N, K, [&](int config) {
         return runners[config](A, B, xs, ws, bias, D, M, N, K, stream);
@@ -499,6 +511,18 @@ bool dispatch_fused_no_bias(const int8_t* A, const int8_t* B, const float* xs, c
         &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
                              cutlass::arch::Sm80, false, 16,
                              ThreadblockSwizzleLeanStreamK>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
     };
     return launch_fused_int8_heuristic(M, N, K, [&](int config) {
         return runners[config](A, B, xs, ws, D, M, N, K, stream);
@@ -533,6 +557,18 @@ bool dispatch_fused_no_bias_config(
         &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
                              cutlass::arch::Sm80, false, 16,
                              ThreadblockSwizzleLeanStreamK>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
     };
     constexpr int config_count = sizeof(runners) / sizeof(runners[0]);
     if (config < 0 || config >= config_count) return false;
@@ -566,6 +602,18 @@ bool dispatch_fused_strided(const int8_t* A, const int8_t* B, const float* xs, c
         &FusedInt8Gemm<OutT, 128, 256, 64, 64, 64, 64, 3,
                        cutlass::arch::Sm80, float, false, 16,
                        ThreadblockSwizzleLeanStreamK>::run_strided,
+        &FusedInt8Gemm<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, float, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run_strided,
+        &FusedInt8Gemm<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, float, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run_strided,
+        &FusedInt8Gemm<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, float, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run_strided,
+        &FusedInt8Gemm<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, float, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run_strided,
     };
     return launch_fused_int8_heuristic(M, N, K, [&](int config) {
         return runners[config](
@@ -601,6 +649,18 @@ bool dispatch_fused_no_bias_strided(
         &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
                              cutlass::arch::Sm80, false, 16,
                              ThreadblockSwizzleLeanStreamK>::run_strided,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run_strided,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run_strided,
+        &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<4>>::run_strided,
+        &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
+                             cutlass::arch::Sm80, false, 16,
+                             cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run_strided,
     };
     return launch_fused_int8_heuristic(M, N, K, [&](int config) {
         return runners[config](A, B, xs, ws, D, M, N, K, output_stride, stream);

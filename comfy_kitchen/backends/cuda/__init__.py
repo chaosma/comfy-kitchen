@@ -504,7 +504,19 @@ def _empty_cuda_tensor(device: torch.device, dtype: torch.dtype) -> torch.Tensor
 # Output is bit-identical between the two configs (verified, max abs diff 0.0),
 # so this is scheduling only.
 _STREAMK_WAVE_LIMIT = 140.0
+# Grouped-swizzle config for weight matrices that do not fit L2 (see below).
+_GROUPED_SWIZZLE_CONFIG = 15          # 128x256x64, GemmIdentityThreadblockSwizzle<8>
+_L2_SPILL_FRACTION = 0.75
 _sm_count_cache: dict[int, int] = {}
+_l2_cache_size: dict[int, int] = {}
+
+
+def _l2_bytes(device_index: int) -> int:
+    n = _l2_cache_size.get(device_index)
+    if n is None:
+        n = int(getattr(torch.cuda.get_device_properties(device_index), "L2_cache_size", 0) or 0)
+        _l2_cache_size[device_index] = n
+    return n
 
 
 def _sm_count(device_index: int) -> int:
@@ -542,6 +554,24 @@ def _int8_config_override(m: int, n: int, k: int, device_index: int, has_bias: b
     """
     if has_bias or _STREAMK_INT8_OVERRIDE_OFF:
         return None
+
+    # (a) The weight matrix does not fit L2. B is re-read once per M-tile row, so
+    # the default un-grouped rasterisation (GemmIdentityThreadblockSwizzle<1>)
+    # streams it from HBM repeatedly. Grouping CTAs raises the L2 hit rate.
+    # Measured on an RTX 4090 (72 MiB L2), M=38819, all bit-identical:
+    #     shape            B / L2   default          swizzle<8>
+    #     out_proj  N5376  K7168   0.51x  86.7% (StreamK)  83.7%   -> keep default
+    #     fc2       N5376  K14336  1.02x  76.5% (StreamK)  79.9%   -> grouped
+    #     qkv_proj  N21504 K5376   1.53x  63.3%            81.5%   -> grouped
+    #     fc1       N28672 K5376   2.04x  62.5%            78.7%   -> grouped
+    # B-size relative to L2 orders achieved throughput exactly; wave count does
+    # not (50, 50, 200, 266), which is what identifies this as an L2-reuse limit
+    # rather than a tile-shape one.
+    l2 = _l2_bytes(device_index)
+    if l2 and (n * k) >= _L2_SPILL_FRACTION * l2:
+        return _GROUPED_SWIZZLE_CONFIG
+
+    # (b) StreamK on a shape with far more waves than it can help. See above.
     if _heuristic_fused_int8_config(m, n, k) != 13:
         return None
     ctas = -(-m // 128) * (-(-n // 256))
