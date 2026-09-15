@@ -28,6 +28,8 @@ def main():
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--seeds", type=int, nargs="+", default=(999, 1101),
                         help="First seed warms each shape; the rest are measured")
+    parser.add_argument("--shapes", nargs="+", choices=[name for name, *_ in SHAPES],
+                        help="Limit runs when two policies select identical GEMMs")
     args = parser.parse_args()
     graph = json.load(open(args.workflow))
     types = {node["class_type"]: node for node in graph.values()}
@@ -52,6 +54,8 @@ def main():
             return json.load(response)
 
     for label, width, height, frames in SHAPES:
+        if args.shapes and label not in args.shapes:
+            continue
         for rep, seed in enumerate(args.seeds):
             current = copy.deepcopy(graph)
             values = {n["class_type"]: n["inputs"] for n in current.values()}

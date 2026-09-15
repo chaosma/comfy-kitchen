@@ -267,13 +267,21 @@ keep the full 20-step comparison separate from the short probe.
 
 From this checkout on gpu4, the client and guarded server launcher run the
 same `pf_ref_768_api.json` graph, with no LoRA, on dedicated port 8190. They
-render each shape once with warmup seed 999 and once with measured seed 1101,
+render each selected shape once with warmup seed 999 and once with measured seed 1101,
 recording client wall time and ComfyUI history in `out/ablation`. Never use
 ports 8188 or 8189 or GPUs 0 or 3 for this experiment:
 
 ```bash
 GPU=1 bash samples/run_h3_policy_matrix.sh
 ```
+
+The guarded script omits two sets of redundant videos: at 480p/124f, A and B
+choose identical GEMM configs because the wave rule never fires; across these
+four model shapes, C and D choose identical GEMM configs because the grouping
+rule takes precedence on the projections affected by the wave rule. It runs C
+only at 768p/124f as a sanity check and labels all other omitted cells as
+predicted equality, not measured equality. This saves GPU time without
+mistaking repeated identical dispatch for an independent treatment.
 
 For three measured seeds instead of an exploratory single measurement, pass
 `--seeds 999 1101 1102 1103` to the script. The same seed sequence must be used

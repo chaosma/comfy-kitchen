@@ -29,13 +29,16 @@ stop_server() {
 trap stop_server EXIT
 
 for policy in A B C D; do
+  shape_args=()
   case "$policy" in
     A) export COMFY_KITCHEN_DISABLE_GROUPED_SWIZZLE_OVERRIDE=1
        export COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE=1 ;;
     B) export COMFY_KITCHEN_DISABLE_GROUPED_SWIZZLE_OVERRIDE=1
-       export COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE=0 ;;
+       export COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE=0
+       shape_args=(--shapes 480p_345f 768p_124f 768p_345f) ;;
     C) export COMFY_KITCHEN_DISABLE_GROUPED_SWIZZLE_OVERRIDE=0
-       export COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE=1 ;;
+       export COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE=1
+       shape_args=(--shapes 768p_124f) ;;
     D) export COMFY_KITCHEN_DISABLE_GROUPED_SWIZZLE_OVERRIDE=0
        export COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE=0 ;;
   esac
@@ -65,7 +68,7 @@ for policy in A B C D; do
 
   echo "policy $policy: grouped_disable=$COMFY_KITCHEN_DISABLE_GROUPED_SWIZZLE_OVERRIDE wave_disable=$COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE" | tee -a "$OUTPUT/matrix.log"
   "$ROOT/venv/bin/python" "$ROOT/src/comfy-kitchen/samples/queue_h3_policy_probe.py" \
-    --workflow "$WORKFLOW" --port "$PORT" --policy "$policy" "$@" \
+    --workflow "$WORKFLOW" --port "$PORT" --policy "$policy" "$@" "${shape_args[@]}" \
     >> "$OUTPUT/policy_matrix.jsonl" 2>> "$OUTPUT/matrix.err"
 
   stop_server
