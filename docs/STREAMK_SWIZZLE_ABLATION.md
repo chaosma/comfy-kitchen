@@ -107,14 +107,14 @@ PY
 
 ## Shapes
 
-Run all four H3 projections at the measured 768p/124-frame value `M=38819`:
+Run all four H3 projections at the live 768p/124-frame value `M=38098`:
 
 | Projection | M | N | K | Output tiles | Waves on 128 SMs |
 |---|---:|---:|---:|---:|---:|
-| `out_proj` | 38819 | 5376 | 7168 | 6,384 | 49.875 |
-| `fc2` | 38819 | 5376 | 14336 | 6,384 | 49.875 |
-| `qkv_proj` | 38819 | 21504 | 5376 | 25,536 | 199.5 |
-| `fc1` | 38819 | 28672 | 5376 | 34,048 | 266 |
+| `out_proj` | 38098 | 5376 | 7168 | 6,258 | 48.891 |
+| `fc2` | 38098 | 5376 | 14336 | 6,258 | 48.891 |
+| `qkv_proj` | 38098 | 21504 | 5376 | 25,032 | 195.563 |
+| `fc1` | 38098 | 28672 | 5376 | 33,376 | 260.75 |
 
 Calculate waves on the actual device as
 
@@ -122,7 +122,7 @@ Calculate waves on the actual device as
 ceil(M / 128) * ceil(N / 256) / SM_count
 ```
 
-For the StreamK crossover, also hold `M=38819`, `K=5376` and sweep:
+For the earlier nearby-shape StreamK crossover, hold `M=38819`, `K=5376` and sweep:
 
 | N | N tiles | Waves on 128 SMs |
 |---:|---:|---:|
@@ -148,8 +148,9 @@ Confirm all four from the model's projection inputs before treating the
 synthetic shape sweep as exact. Run the repeated shape sweep with
 `GPU=1 bash samples/run_int8_shape_sweep.sh` on a free GPU 1; it refuses to
 start if that card already uses over 200 MiB. The earlier 768p/124f kernel
-campaign used `M=38,819` with **another prompt** containing 1,109 text rows,
-so those measurements are nearby shapes, not matched to this workflow. An
+campaign used `M=38,819`, which is 721 rows above this live video graph.
+Those measurements are nearby shapes, not matched to this conditioning;
+the earlier run's text/conditioning makeup has not been reverified. An
 earlier summary called the 141f residual
 of 858 rows “text tokens,” but 470 of those rows were audio.
 

@@ -8,6 +8,12 @@ PORT=${PORT:-8190}
 OUTPUT=${OUTPUT:-$ROOT/out/ablation}
 WORKFLOW=$ROOT/workflows/pf_ref_768_api.json
 POLICIES=${POLICIES:-"A B C D"}
+explicit_shapes=0
+for arg in "$@"; do
+  if [ "$arg" = --shapes ]; then
+    explicit_shapes=1
+  fi
+done
 USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -i "$GPU")
 if [ "$USED" -gt 200 ]; then
   echo "GPU $GPU is busy (${USED} MiB); choose an idle card." >&2
@@ -44,6 +50,9 @@ for policy in $POLICIES; do
     D) export COMFY_KITCHEN_DISABLE_GROUPED_SWIZZLE_OVERRIDE=0
        export COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE=0 ;;
   esac
+  if [ "$explicit_shapes" -eq 1 ]; then
+    shape_args=()
+  fi
 
   # start_server.sh refuses busy cards and ports, binds localhost, and execs
   # Python so server_pid is the precise process this script started.
@@ -85,4 +94,4 @@ for policy in $POLICIES; do
   fi
 done
 
-echo "All four policies complete; results: $OUTPUT/policy_matrix.jsonl"
+echo "Policy matrix complete; results: $OUTPUT/policy_matrix.jsonl"
