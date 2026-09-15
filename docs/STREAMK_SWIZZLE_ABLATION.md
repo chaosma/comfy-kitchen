@@ -231,6 +231,10 @@ Common metric names include `dram__bytes_read.sum`,
 `lts__t_sector_hit_rate.pct`, and
 `sm__throughput.avg.pct_of_peak_sustained_elapsed`; query `ncu --query-metrics`
 and record substitutions if these names are unavailable.
+On gpu4, `ncu` is installed at `/usr/local/cuda/bin/ncu`, but this account
+cannot access hardware counters (`ERR_NVGPUCTRPERM`, driver setting
+`RmProfilingAdminOnly: 1`). If this remains true, record the probe error and
+label the input-footprint calculation as a model rather than measured L2 data.
 
 The grouping hypothesis predicts lower DRAM reads and/or a higher L2 hit rate
 for config 15 than config 0 on the large `fc1` and `qkv_proj` shapes. The
@@ -304,6 +308,21 @@ the history node's `images` field even though the file is a video; confirm
 the recorded MP4 path exists before comparing decoded streams.
 Its `cached_nodes` field must not contain the `SamplerCustomAdvanced` node;
 other graph nodes may reuse their fixed model weights or prompt conditioning.
+
+To add two measurements to the initial 768p/124-frame seed 1101 for the
+A/B/D treatments, rerun those three policies with fresh servers and seeds
+1102 and 1103. The runner honors an explicit shape selection for every
+policy; keep the new logs in a separate directory:
+
+```bash
+POLICIES="A B D" OUTPUT=/home/ubuntu/chao/h3-lab/out/ablation/repeat GPU=1 \
+  bash samples/run_h3_policy_matrix.sh \
+  --seeds 999 1102 1103 --shapes 768p_124f
+```
+
+Together with the initial matrix, this provides three measured 768p/124f
+seeds per A/B/D policy. One C/D sanity comparison suffices to verify their
+identical GEMM dispatch on this graph.
 
 For the matched 20-step 768p/124f check, run only the original and combined
 policies after the short matrix finishes. Put its logs in a separate output
