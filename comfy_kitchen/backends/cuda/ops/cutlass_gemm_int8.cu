@@ -55,7 +55,8 @@ void* get_stream_workspace(size_t size, cudaStream_t stream) {
     return workspace.data;
 }
 
-struct ThreadblockSwizzleLeanStreamK {
+template <bool EnableStreamKWorkSplitting>
+struct ThreadblockSwizzleLeanStreamKBase {
     using StreamkFeature = void;
 
     template <typename GemmKernel>
@@ -82,9 +83,9 @@ struct ThreadblockSwizzleLeanStreamK {
     int sk_waves;
     bool cohort_raster = false;
 
-    ThreadblockSwizzleLeanStreamK() = default;
+    ThreadblockSwizzleLeanStreamKBase() = default;
 
-    ThreadblockSwizzleLeanStreamK(
+    ThreadblockSwizzleLeanStreamKBase(
         cutlass::gemm::GemmUniversalMode,
         cutlass::gemm::GemmCoord problem_size_arg,
         cutlass::gemm::GemmCoord tile_size,
@@ -108,7 +109,7 @@ struct ThreadblockSwizzleLeanStreamK {
                         : available_sms) {
         const int output_tiles = tiled_shape_.m() * tiled_shape_.n();
         const int partial_wave_tiles = output_tiles % avail_sms;
-        if (partial_wave_tiles == 0) {
+        if (!EnableStreamKWorkSplitting || partial_wave_tiles == 0) {
             sk_tiles = 0;
             sk_blocks = 0;
             sk_waves = 0;
@@ -208,6 +209,14 @@ struct ThreadblockSwizzleLeanStreamK {
             : block_index;
     }
 };
+
+using ThreadblockSwizzleLeanStreamK = ThreadblockSwizzleLeanStreamKBase<true>;
+
+// Matched control for Stream-K experiments. It uses the same specialized
+// kernel and tile raster as LeanStreamK, but assigns every output tile to one
+// data-parallel CTA, so there are no split tiles or cross-CTA reductions.
+using ThreadblockSwizzleLeanStreamKDataParallel =
+    ThreadblockSwizzleLeanStreamKBase<false>;
 
 template <typename T, typename = void>
 struct IsStreamKSwizzle : std::false_type {};
@@ -478,6 +487,9 @@ bool dispatch_fused(const int8_t* A, const int8_t* B, const float* xs, const flo
         &FusedInt8Gemm<OutT, 128, 128, 64, 64, 64, 64, 4,
                              cutlass::arch::Sm80, float, false, 16,
                              cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
+        &FusedInt8Gemm<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, float, false, 16,
+                             ThreadblockSwizzleLeanStreamKDataParallel>::run,
     };
     return launch_fused_int8_heuristic(M, N, K, [&](int config) {
         return runners[config](A, B, xs, ws, bias, D, M, N, K, stream);
@@ -523,6 +535,9 @@ bool dispatch_fused_no_bias(const int8_t* A, const int8_t* B, const float* xs, c
         &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
                              cutlass::arch::Sm80, false, 16,
                              cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             ThreadblockSwizzleLeanStreamKDataParallel>::run,
     };
     return launch_fused_int8_heuristic(M, N, K, [&](int config) {
         return runners[config](A, B, xs, ws, D, M, N, K, stream);
@@ -569,6 +584,9 @@ bool dispatch_fused_no_bias_config(
         &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
                              cutlass::arch::Sm80, false, 16,
                              cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             ThreadblockSwizzleLeanStreamKDataParallel>::run,
     };
     constexpr int config_count = sizeof(runners) / sizeof(runners[0]);
     if (config < 0 || config >= config_count) return false;
@@ -614,6 +632,9 @@ bool dispatch_fused_strided(const int8_t* A, const int8_t* B, const float* xs, c
         &FusedInt8Gemm<OutT, 128, 128, 64, 64, 64, 64, 4,
                              cutlass::arch::Sm80, float, false, 16,
                              cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run_strided,
+        &FusedInt8Gemm<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, float, false, 16,
+                             ThreadblockSwizzleLeanStreamKDataParallel>::run_strided,
     };
     return launch_fused_int8_heuristic(M, N, K, [&](int config) {
         return runners[config](
@@ -661,6 +682,9 @@ bool dispatch_fused_no_bias_strided(
         &FusedInt8GemmNoBias<OutT, 128, 128, 64, 64, 64, 64, 4,
                              cutlass::arch::Sm80, false, 16,
                              cutlass::gemm::threadblock::GemmIdentityThreadblockSwizzle<8>>::run_strided,
+        &FusedInt8GemmNoBias<OutT, 128, 256, 64, 64, 64, 64, 3,
+                             cutlass::arch::Sm80, false, 16,
+                             ThreadblockSwizzleLeanStreamKDataParallel>::run_strided,
     };
     return launch_fused_int8_heuristic(M, N, K, [&](int config) {
         return runners[config](A, B, xs, ws, D, M, N, K, output_stride, stream);

@@ -548,9 +548,9 @@ def _heuristic_fused_int8_config(m: int, n: int, k: int) -> int:
 def _int8_config_override(m: int, n: int, k: int, device_index: int, has_bias: bool):
     """Config index to force, or None to let the C++ heuristic decide.
 
-    Only fires where the heuristic would choose StreamK on a shape with far more
-    waves than StreamK can help. cutlass_int8_dequant_config() takes no bias, so
-    biased GEMMs are left alone (H3's DiT projections are all bias-free).
+    The grouped-swizzle and Stream-K wave overrides have independent experiment
+    switches. cutlass_int8_dequant_config() takes no bias, so biased GEMMs are
+    left alone (H3's DiT projections are all bias-free).
     """
     if has_bias or _STREAMK_INT8_OVERRIDE_OFF:
         return None
@@ -567,11 +567,14 @@ def _int8_config_override(m: int, n: int, k: int, device_index: int, has_bias: b
     # B-size relative to L2 orders achieved throughput exactly; wave count does
     # not (50, 50, 200, 266), which is what identifies this as an L2-reuse limit
     # rather than a tile-shape one.
-    l2 = _l2_bytes(device_index)
-    if l2 and (n * k) >= _L2_SPILL_FRACTION * l2:
-        return _GROUPED_SWIZZLE_CONFIG
+    if not _GROUPED_SWIZZLE_OVERRIDE_OFF:
+        l2 = _l2_bytes(device_index)
+        if l2 and (n * k) >= _L2_SPILL_FRACTION * l2:
+            return _GROUPED_SWIZZLE_CONFIG
 
     # (b) StreamK on a shape with far more waves than it can help. See above.
+    if _STREAMK_WAVE_OVERRIDE_OFF:
+        return None
     if _heuristic_fused_int8_config(m, n, k) != 13:
         return None
     ctas = -(-m // 128) * (-(-n // 256))
@@ -580,7 +583,14 @@ def _int8_config_override(m: int, n: int, k: int, device_index: int, has_bias: b
     return 0
 
 
+# Legacy master switch retained for existing A/B scripts.
 _STREAMK_INT8_OVERRIDE_OFF = os.environ.get("COMFY_KITCHEN_DISABLE_STREAMK_OVERRIDE", "0") == "1"
+_GROUPED_SWIZZLE_OVERRIDE_OFF = (
+    os.environ.get("COMFY_KITCHEN_DISABLE_GROUPED_SWIZZLE_OVERRIDE", "0") == "1"
+)
+_STREAMK_WAVE_OVERRIDE_OFF = (
+    os.environ.get("COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE", "0") == "1"
+)
 
 
 def _int8_weight_scale_arg(weight_scale: torch.Tensor, device: torch.device) -> torch.Tensor:
