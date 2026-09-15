@@ -301,6 +301,8 @@ The client records `server_wall_s` from ComfyUI's history timestamps and
 `wall_s` from its HTTP request and polling. The MP4 attachment appears under
 the history node's `images` field even though the file is a video; confirm
 the recorded MP4 path exists before comparing decoded streams.
+Its `cached_nodes` field must not contain the `SamplerCustomAdvanced` node;
+other graph nodes may reuse their fixed model weights or prompt conditioning.
 
 For the matched 20-step 768p/124f check, run only the original and combined
 policies after the short matrix finishes. Put its logs in a separate output

@@ -40,6 +40,8 @@ def main():
     if not all(node["inputs"].get("strength_model", 0) == 0
                for node in graph.values() if node["class_type"] == "LoraLoaderModelOnly"):
         parser.error("disable the acceleration LoRAs before measuring")
+    sampler_ids = {key for key, node in graph.items()
+                   if node["class_type"] == "SamplerCustomAdvanced"}
 
     url = f"http://127.0.0.1:{args.port}"
 
@@ -95,6 +97,8 @@ def main():
                       for file in group
                       if file.get("filename", "").endswith(".mp4")]
             messages = history.get("status", {}).get("messages", ())
+            cached_nodes = [node for kind, body in messages if kind == "execution_cached"
+                            for node in body.get("nodes", ())]
             timestamps = {kind: body["timestamp"] for kind, body in messages
                           if "timestamp" in body}
             server_wall = (round((timestamps["execution_success"] -
@@ -105,8 +109,11 @@ def main():
                    "height": height, "frames": frames, "steps": args.steps,
                    "seed": seed, "warmup": rep == 0, "prompt_id": prompt_id,
                    "wall_s": round(elapsed, 2), "server_wall_s": server_wall,
-                   "completed": completed, "videos": videos, "messages": messages}
+                   "completed": completed, "videos": videos,
+                   "cached_nodes": cached_nodes, "messages": messages}
             print(json.dumps(row), flush=True)
+            if sampler_ids.intersection(cached_nodes):
+                raise RuntimeError(f"{label}: sampler was cached instead of generating")
             if not completed:
                 raise RuntimeError(f"{label}: prompt {prompt_id} failed; inspect server log")
 
