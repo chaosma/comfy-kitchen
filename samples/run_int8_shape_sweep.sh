@@ -16,8 +16,8 @@ cd "$ROOT/src/comfy-kitchen"
 export CUDA_VISIBLE_DEVICES="$GPU"
 export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 
-# Same 1,109-text-row prompt as the reference 768p/124f workflow.
-for pair in 480p_124f:16508 480p_345f:43569 768p_124f:38819 768p_345f:105075; do
+# Same 388-text-row prompt as the measured ComfyUI workflow.
+for pair in 480p_124f:15787 480p_345f:42848 768p_124f:38098 768p_345f:104354; do
   label=${pair%%:*}
   m=${pair##*:}
   "$ROOT/venv/bin/python" samples/bench_int8_ablation.py --m "$m" --shape "$label" \

@@ -139,17 +139,18 @@ The actual wave counts must use the server's SM count.
 
 For the resolution and duration comparison, use 864x480 and 1344x768 at
 **124 frames (~5 s)** and **345 frames (~15 s)**. Use the same prompt at all
-four shapes: the existing 768p/124f reference prompt in `h3/prompt.txt` has
-1,109 text rows. `M` includes video, audio, **and** text rows. Video rows are
+four shapes: the `pf_ref_768_api.json` workflow has **388 text rows** in the
+actual ComfyUI run. `M` includes video, audio, **and** text rows. Video rows are
 `video_latent_t(frames) * (width/32) * (height/32)`; audio contributes
-`2 * round(frames/24 * 40)` rows. This predicts `M=16,508` (480p/124f),
-`43,569` (480p/345f), `38,819` (768p/124f), and `105,075` (768p/345f).
+`2 * round(frames/24 * 40)` rows. This gives `M=15,787` (480p/124f),
+`42,848` (480p/345f), `38,098` (768p/124f), and `104,354` (768p/345f).
 Confirm all four from the model's projection inputs before treating the
 synthetic shape sweep as exact. Run the repeated shape sweep with
 `GPU=1 bash samples/run_int8_shape_sweep.sh` on a free GPU 1; it refuses to
-start if that card already uses over 200 MiB. An earlier 345f measurement reported
-`M=104,354` with a *different prompt* containing 388 text rows; its kernel
-shape is therefore different. An earlier summary called the 141f residual
+start if that card already uses over 200 MiB. The earlier 768p/124f kernel
+campaign used `M=38,819` with **another prompt** containing 1,109 text rows,
+so those measurements are nearby shapes, not matched to this workflow. An
+earlier summary called the 141f residual
 of 858 rows “text tokens,” but 470 of those rows were audio.
 
 ## Kernel microbenchmark protocol
@@ -188,7 +189,7 @@ correctness per projection. For example, from the checkout with an idle card:
 ```bash
 mkdir -p out/ablation
 CUDA_VISIBLE_DEVICES=1 python samples/bench_int8_ablation.py \
-  --m 38819 --shape 768p_124f > out/ablation/kernel_768p_124f.jsonl
+  --m 38098 --shape 768p_124f > out/ablation/kernel_768p_124f.jsonl
 ```
 
 It checks exact BF16 output equality against config 0 before timing. Run the
@@ -197,8 +198,9 @@ for grouping and config 18/13 for K splitting.
 
 LeanStreamK only splits the `sk_tiles` near a partly filled wave, and it does
 not split at all if the output tile count is a multiple of the SM count. On
-128 SMs, `fc1` at 768p/124f has exactly 34,048 output tiles (266 waves):
-config 13 and 18 should run the same K workload. At that shape, a config
+128 SMs, `fc1` at the earlier `M=38,819` has exactly 34,048 output tiles
+(266 waves): config 13 and 18 do the same K workload at that shape. At the
+current workflow's `M=38,098`, a small remainder can split. A config
 13-versus-0 slowdown is **not** evidence that K splitting caused it. Compare
 13/18 on smaller test shapes with a higher split-tile fraction too.
 
