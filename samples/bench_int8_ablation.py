@@ -75,7 +75,12 @@ def main():
                 results[config] = {"supported": False}
                 continue
             equal = torch.equal(baseline, output)
-            maximum = (baseline.float() - output.float()).abs().max().item()
+            maximum = 0.0
+            if not equal:
+                for start in range(0, args.m, 128):
+                    end = min(start + 128, args.m)
+                    difference = (baseline[start:end].float() - output[start:end].float()).abs()
+                    maximum = max(maximum, difference.max().item())
             results[config] = {"supported": True, "exact": equal, "max_abs_diff": maximum,
                                "round_ms": []}
             if not equal:
