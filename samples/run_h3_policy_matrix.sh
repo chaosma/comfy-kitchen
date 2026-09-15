@@ -7,6 +7,7 @@ GPU=${GPU:-1}
 PORT=${PORT:-8190}
 OUTPUT=${OUTPUT:-$ROOT/out/ablation}
 WORKFLOW=$ROOT/workflows/pf_ref_768_api.json
+POLICIES=${POLICIES:-"A B C D"}
 USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits -i "$GPU")
 if [ "$USED" -gt 200 ]; then
   echo "GPU $GPU is busy (${USED} MiB); choose an idle card." >&2
@@ -29,7 +30,7 @@ stop_server() {
 }
 trap stop_server EXIT
 
-for policy in A B C D; do
+for policy in $POLICIES; do
   shape_args=()
   case "$policy" in
     A) export COMFY_KITCHEN_DISABLE_GROUPED_SWIZZLE_OVERRIDE=1

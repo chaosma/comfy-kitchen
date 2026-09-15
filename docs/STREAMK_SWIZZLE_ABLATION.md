@@ -296,6 +296,16 @@ as exploratory until repetitions and a 20-step reference confirm the result.
 Use `[int8-ablation]` lines in each dedicated server log to check that all
 four projection shapes used the expected M and independent flags.
 
+For the matched 20-step 768p/124f check, run only the original and combined
+policies after the short matrix finishes. Put its logs in a separate output
+directory so the probe logs remain available:
+
+```bash
+POLICIES="A D" OUTPUT=/home/ubuntu/chao/h3-lab/out/ablation/full20 GPU=1 \
+  bash samples/run_h3_policy_matrix.sh \
+  --steps 20 --seeds 999 1101 --shapes 768p_124f
+```
+
 Compare decoded video and audio rather than MP4 container bytes. Containers can
 differ because of timestamps.
 
