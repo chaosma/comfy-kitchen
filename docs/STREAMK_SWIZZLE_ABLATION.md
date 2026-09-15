@@ -135,10 +135,19 @@ For the StreamK crossover, also hold `M=38819`, `K=5376` and sweep:
 The actual wave counts must use the server's SM count.
 
 For the resolution and duration comparison, use 864x480 and 1344x768 at
-**124 frames (~5 s)** and **345 frames (~15 s)**. Keep the 858 text tokens in
-`M`: the measured 768p/124f value is 38,819 and the 768p/345f value is
-104,354. Record the actual 480p values and confirm all four from the model's
-projection inputs before treating the synthetic shape sweep as exact.
+**124 frames (~5 s)** and **345 frames (~15 s)**. Use the same prompt at all
+four shapes: the existing 768p/124f reference prompt in `h3/prompt.txt` has
+1,109 text rows. `M` includes video, audio, **and** text rows. Video rows are
+`video_latent_t(frames) * (width/32) * (height/32)`; audio contributes
+`2 * round(frames/24 * 40)` rows. This predicts `M=16,508` (480p/124f),
+`43,569` (480p/345f), `38,819` (768p/124f), and `105,075` (768p/345f).
+Confirm all four from the model's projection inputs before treating the
+synthetic shape sweep as exact. Run the repeated shape sweep with
+`GPU=1 bash samples/run_int8_shape_sweep.sh` on a free GPU 1; it refuses to
+start if that card already uses over 200 MiB. An earlier 345f measurement reported
+`M=104,354` with a *different prompt* containing 388 text rows; its kernel
+shape is therefore different. An earlier summary called the 141f residual
+of 858 rows “text tokens,” but 470 of those rows were audio.
 
 ## Kernel microbenchmark protocol
 
@@ -182,6 +191,13 @@ CUDA_VISIBLE_DEVICES=1 python samples/bench_int8_ablation.py \
 It checks exact BF16 output equality against config 0 before timing. Run the
 other three measured M values with the same flags and compare config 0/14/15
 for grouping and config 18/13 for K splitting.
+
+LeanStreamK only splits the `sk_tiles` near a partly filled wave, and it does
+not split at all if the output tile count is a multiple of the SM count. On
+128 SMs, `fc1` at 768p/124f has exactly 34,048 output tiles (266 waves):
+config 13 and 18 should run the same K workload. At that shape, a config
+13-versus-0 slowdown is **not** evidence that K splitting caused it. Compare
+13/18 on smaller test shapes with a higher split-tile fraction too.
 
 Produce one table per shape with at least:
 
