@@ -258,11 +258,30 @@ steady per-pass and end-to-end times with at least three repetitions.
 To cover all four resolution/duration combinations at manageable cost, use a
 fixed four-step **measurement probe without any acceleration LoRA** for the
 four-policy matrix. Scheduler choices depend on M/N/K, not denoising step count.
-Report its sampling time per step and label it a short probe, since startup and
-decode affect total wall time. Validate at least one policy pair again using
+Report its full-graph wall time and label it a short probe, since encode and
+decode affect total wall time. Record sampler time separately when measuring
+per-pass effects. Validate at least one policy pair again using
 the established 20-step 768p/124f workflow before extrapolating a 20-step
 end-to-end saving. A 15-second/20-step render is substantially more expensive;
 keep the full 20-step comparison separate from the short probe.
+
+From this checkout on gpu4, the client and guarded server launcher run the
+same `pf_ref_768_api.json` graph, with no LoRA, on dedicated port 8190. They
+render each shape once with warmup seed 999 and once with measured seed 1101,
+recording client wall time and ComfyUI history in `out/ablation`. Never use
+ports 8188 or 8189 or GPUs 0 or 3 for this experiment:
+
+```bash
+GPU=1 bash samples/run_h3_policy_matrix.sh
+```
+
+For three measured seeds instead of an exploratory single measurement, pass
+`--seeds 999 1101 1102 1103` to the script. The same seed sequence must be used
+for each policy; repeatedly submitting an identical graph and seed can reuse
+ComfyUI's cached output instead of generating a new video. Compare server log
+`Prompt executed in ... seconds` against client wall time and inspect the
+history status and output file for every measured case. Report the first pass
+as exploratory until repetitions and a 20-step reference confirm the result.
 
 Compare decoded video and audio rather than MP4 container bytes. Containers can
 differ because of timestamps.
