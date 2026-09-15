@@ -38,6 +38,9 @@ This experiment branch adds:
   high-wave rule that replaces config 13 with config 0;
 - the existing `COMFY_KITCHEN_DISABLE_STREAMK_OVERRIDE=1` remains a legacy
   master switch that disables both rules.
+- `COMFY_KITCHEN_TRACE_INT8_ABLATION=1` logs each distinct observed M/N/K and
+  the two loaded disable flags once per server process, so the synthetic
+  shapes and independent policy settings can be checked against actual GEMMs.
 
 Environment flags are read when Python imports the CUDA backend. Restart the
 Python process or ComfyUI server after changing them.
@@ -290,6 +293,8 @@ ComfyUI's cached output instead of generating a new video. Compare server log
 `Prompt executed in ... seconds` against client wall time and inspect the
 history status and output file for every measured case. Report the first pass
 as exploratory until repetitions and a 20-step reference confirm the result.
+Use `[int8-ablation]` lines in each dedicated server log to check that all
+four projection shapes used the expected M and independent flags.
 
 Compare decoded video and audio rather than MP4 container bytes. Containers can
 differ because of timestamps.

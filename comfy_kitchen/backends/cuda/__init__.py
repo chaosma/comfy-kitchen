@@ -552,6 +552,11 @@ def _int8_config_override(m: int, n: int, k: int, device_index: int, has_bias: b
     switches. cutlass_int8_dequant_config() takes no bias, so biased GEMMs are
     left alone (H3's DiT projections are all bias-free).
     """
+    if _TRACE_INT8_ABLATION and (m, n, k, device_index, has_bias) not in _int8_ablation_seen:
+        _int8_ablation_seen.add((m, n, k, device_index, has_bias))
+        print(f"[int8-ablation] M={m} N={n} K={k} bias={has_bias} "
+              f"grouped_disabled={_GROUPED_SWIZZLE_OVERRIDE_OFF} "
+              f"wave_disabled={_STREAMK_WAVE_OVERRIDE_OFF}", flush=True)
     if has_bias or _STREAMK_INT8_OVERRIDE_OFF:
         return None
 
@@ -591,6 +596,8 @@ _GROUPED_SWIZZLE_OVERRIDE_OFF = (
 _STREAMK_WAVE_OVERRIDE_OFF = (
     os.environ.get("COMFY_KITCHEN_DISABLE_STREAMK_WAVE_OVERRIDE", "0") == "1"
 )
+_TRACE_INT8_ABLATION = os.environ.get("COMFY_KITCHEN_TRACE_INT8_ABLATION", "0") == "1"
+_int8_ablation_seen: set[tuple[int, int, int, int, bool]] = set()
 
 
 def _int8_weight_scale_arg(weight_scale: torch.Tensor, device: torch.device) -> torch.Tensor:

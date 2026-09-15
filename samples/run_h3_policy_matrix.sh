@@ -16,6 +16,7 @@ fi
 mkdir -p "$OUTPUT"
 cd "$ROOT"
 export PYTHONPATH="$ROOT/src/comfy-kitchen${PYTHONPATH:+:$PYTHONPATH}"
+export COMFY_KITCHEN_TRACE_INT8_ABLATION=1
 unset COMFY_KITCHEN_DISABLE_STREAMK_OVERRIDE
 
 server_pid=
