@@ -134,6 +134,12 @@ For the StreamK crossover, also hold `M=38819`, `K=5376` and sweep:
 
 The actual wave counts must use the server's SM count.
 
+For the resolution and duration comparison, use 864x480 and 1344x768 at
+**124 frames (~5 s)** and **345 frames (~15 s)**. Keep the 858 text tokens in
+`M`: the measured 768p/124f value is 38,819 and the 768p/345f value is
+104,354. Record the actual 480p values and confirm all four from the model's
+projection inputs before treating the synthetic shape sweep as exact.
+
 ## Kernel microbenchmark protocol
 
 Use `_C.benchmark_cutlass_int8_dequant_config` so every run forces one explicit
@@ -163,6 +169,19 @@ For every shape:
 Keep tensor allocation, values, output dtype, CUDA stream, clocks, and process
 identical across configurations. Record GPU temperature and clocks before and
 after the sweep.
+
+The runner `samples/bench_int8_ablation.py` prints raw JSON timing rounds and
+correctness per projection. For example, from the checkout with an idle card:
+
+```bash
+mkdir -p out/ablation
+CUDA_VISIBLE_DEVICES=1 python samples/bench_int8_ablation.py \
+  --m 38819 --shape 768p_124f > out/ablation/kernel_768p_124f.jsonl
+```
+
+It checks exact BF16 output equality against config 0 before timing. Run the
+other three measured M values with the same flags and compare config 0/14/15
+for grouping and config 18/13 for K splitting.
 
 Produce one table per shape with at least:
 
@@ -219,6 +238,15 @@ For each process, confirm the expected `_int8_config_override()` decisions for
 the four projection shapes before timing. Run the same warm model, warmup seed,
 measured seed, resolution, frame count, denoising steps, and GPU. Capture both
 steady per-pass and end-to-end times with at least three repetitions.
+
+To cover all four resolution/duration combinations at manageable cost, use a
+fixed four-step **measurement probe without any acceleration LoRA** for the
+four-policy matrix. Scheduler choices depend on M/N/K, not denoising step count.
+Report its sampling time per step and label it a short probe, since startup and
+decode affect total wall time. Validate at least one policy pair again using
+the established 20-step 768p/124f workflow before extrapolating a 20-step
+end-to-end saving. A 15-second/20-step render is substantially more expensive;
+keep the full 20-step comparison separate from the short probe.
 
 Compare decoded video and audio rather than MP4 container bytes. Containers can
 differ because of timestamps.
