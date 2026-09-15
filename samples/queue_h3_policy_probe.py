@@ -90,12 +90,22 @@ def main():
             elapsed = time.perf_counter() - begin
             completed = history.get("status", {}).get("completed", False)
             output = history.get("outputs", {})
-            videos = [file for node in output.values() for file in node.get("videos", ())]
+            videos = [file for node in output.values()
+                      for group in (node.get("images", ()), node.get("videos", ()))
+                      for file in group
+                      if file.get("filename", "").endswith(".mp4")]
+            messages = history.get("status", {}).get("messages", ())
+            timestamps = {kind: body["timestamp"] for kind, body in messages
+                          if "timestamp" in body}
+            server_wall = (round((timestamps["execution_success"] -
+                                  timestamps["execution_start"]) / 1000, 2)
+                           if "execution_success" in timestamps and
+                           "execution_start" in timestamps else None)
             row = {"policy": args.policy, "shape": label, "width": width,
                    "height": height, "frames": frames, "steps": args.steps,
                    "seed": seed, "warmup": rep == 0, "prompt_id": prompt_id,
-                   "wall_s": round(elapsed, 2), "completed": completed, "videos": videos,
-                   "messages": history.get("status", {}).get("messages", ())}
+                   "wall_s": round(elapsed, 2), "server_wall_s": server_wall,
+                   "completed": completed, "videos": videos, "messages": messages}
             print(json.dumps(row), flush=True)
             if not completed:
                 raise RuntimeError(f"{label}: prompt {prompt_id} failed; inspect server log")

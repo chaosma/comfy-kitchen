@@ -297,6 +297,10 @@ history status and output file for every measured case. Report the first pass
 as exploratory until repetitions and a 20-step reference confirm the result.
 Use `[int8-ablation]` lines in each dedicated server log to check that all
 four projection shapes used the expected M and independent flags.
+The client records `server_wall_s` from ComfyUI's history timestamps and
+`wall_s` from its HTTP request and polling. The MP4 attachment appears under
+the history node's `images` field even though the file is a video; confirm
+the recorded MP4 path exists before comparing decoded streams.
 
 For the matched 20-step 768p/124f check, run only the original and combined
 policies after the short matrix finishes. Put its logs in a separate output
